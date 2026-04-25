@@ -1,0 +1,53 @@
+# Credenciales y configuración sensible
+config.php
+ftp_abundia.js
+
+# Dependencias
+node_modules/
+
+# Capturas de pantalla y scripts de debug DNS
+add_cname_form.png
+antes_guardar_A.png
+choose_type.png
+cname_form.png
+cname_guardado.png
+cname_relleno.png
+cname_resultado.png
+confirm_buttons.png
+confirm_page.png
+debug_login.png
+despues_A.png
+despues_guardar_A.png
+dns_antes.png
+dns_final.png
+edit_a_record.png
+error.png
+hpanel_dashboard.png
+hpanel_login.png
+ionos_dns.png
+ionos_dns_bottom.png
+ionos_dns_full.png
+ionos_domain_details.png
+ionos_dominio.png
+ionos_loggedin.png
+ionos_more_features.png
+ionos_ns_found.png
+ionos_step1_login.png
+ionos_debug.js
+ionos_fix_dns.js
+ionos_nameservers.js
+status.html
+
+# Carpeta de conocimiento privado
+memoria/
+
+# Archivos de sistema
+.DS_Store
+Thumbs.db
+
+# Variables de entorno (contienen API keys)
+.env
+.env.*
+
+# Vercel
+.vercel/

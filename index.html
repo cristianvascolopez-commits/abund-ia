@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ABUND-IA — Oráculo de la Abundancia</title>
+  <meta name="description" content="ABUND-IA. Oráculo esotérico con inteligencia artificial: tarot egipcio, herbolaria, magia y astrología.">
+  <link rel="stylesheet" href="styles.css?v=13">
+</head>
+<body class="oracle-only">
+
+  <canvas id="particles"></canvas>
+
+  <div class="oracle-page">
+    <div class="abundia-layout">
+
+      <!-- ── HERO ──────────────────────────── -->
+      <div class="abundia-hero">
+        <div class="hero-angel-wrap">
+          <img src="images/abundia.jpeg" alt="Diosa de la Abundancia" class="hero-angel-img">
+          <div class="hero-angel-glow"></div>
+        </div>
+        <div class="hero-brand">
+          <div class="brand-eyebrow">☥ Inteligencia Esotérica ☥</div>
+          <h1 class="brand-title">ABUND<span class="brand-ia">-IA</span></h1>
+          <p class="brand-sub">Tarot Egipcio · Herbolaria · Magia · Astrología</p>
+          <div class="brand-separator"></div>
+          <p class="brand-desc">
+            Un oráculo con siglos de conocimiento esotérico<br>
+            y la precisión de la inteligencia artificial.
+          </p>
+        </div>
+      </div>
+
+      <!-- ── ORACLE CHAT ───────────────────── -->
+      <div class="oraculo-container">
+
+        <div class="oraculo-header">
+          <div class="oraculo-status">
+            <div class="status-dot"></div>
+            <span>Oráculo activo</span>
+          </div>
+          <span class="oraculo-title-bar">☥ Tarot Egipcio ☥</span>
+          <div class="oraculo-header-controls">
+            <select id="headerLang" class="lang-selector" title="Idioma">
+              <option value="es">ES</option>
+              <option value="en">EN</option>
+              <option value="pt">PT</option>
+              <option value="fr">FR</option>
+              <option value="de">DE</option>
+              <option value="it">IT</option>
+            </select>
+            <button id="ttsAutoBtn" class="tts-toggle-btn" title="Activar voz automática">🔊</button>
+          </div>
+        </div>
+
+        <div class="chat-messages" id="chatMessages">
+          <div class="msg oracle">
+            <div class="msg-avatar">𓂀</div>
+            <div class="msg-bubble">
+              Soy el Oráculo de ABUND-IA. Herbolaria, magia, grimorios, astrología y Tarot Egipcio.<br><br>
+              ¿Cómo te llamas? <small style="color:var(--text-dim)">(o escribe "omitir")</small>
+            </div>
+          </div>
+        </div>
+
+        <div class="chat-input-area">
+          <div class="image-preview-area" id="imagePreviewArea">
+            <img id="previewImg" class="preview-img" src="" alt=""/>
+            <button class="remove-img-btn" id="removeImgBtn">✕</button>
+          </div>
+          <div class="input-row">
+            <label for="imageUpload" class="upload-label" title="Compartir imagen">🖼</label>
+            <input type="file" id="imageUpload" accept="image/*" hidden>
+            <textarea id="messageInput" placeholder="Consulta al Oráculo... (Enter para enviar)" rows="1"
+              autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"></textarea>
+            <button class="mic-btn" id="micBtn" title="Hablar">🎤</button>
+            <button class="send-btn" id="sendBtn" title="Enviar">⚡</button>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- ── CAPACIDADES ──────────────────── -->
+      <div class="capacidades-section">
+        <div class="cap-title">☥ Lo que el Oráculo puede revelarte ☥</div>
+        <div class="cap-grid">
+
+          <div class="cap-card">
+            <div class="cap-icon">𓇳</div>
+            <div class="cap-name">Tarot Egipcio</div>
+            <div class="cap-desc">Tiradas de 1, 3, 7 cartas, Cruz, Árbol de la Vida y Zodiacal. Lecturas profundas con los 78 arcanos.</div>
+            <div class="cap-hint">Escribe: <em>"hazme una tirada"</em></div>
+          </div>
+
+          <div class="cap-card">
+            <div class="cap-icon">🧿</div>
+            <div class="cap-name">Nivel de Conciencia</div>
+            <div class="cap-desc">Test calibrado según el Mapa de Conciencia de David R. Hawkins. Descubre en qué nivel vibracional estás.</div>
+            <div class="cap-hint">Escribe: <em>"calibra mi nivel de conciencia"</em></div>
+          </div>
+
+          <div class="cap-card">
+            <div class="cap-icon">♑</div>
+            <div class="cap-name">Astrología</div>
+            <div class="cap-desc">Carta natal, tránsitos, compatibilidad entre signos, casas astrológicas y predicciones planetarias.</div>
+            <div class="cap-hint">Escribe: <em>"¿qué dice mi carta natal?"</em></div>
+          </div>
+
+          <div class="cap-card">
+            <div class="cap-icon">🌿</div>
+            <div class="cap-name">Herbolaria &amp; Plantas</div>
+            <div class="cap-desc">Propiedades mágicas y medicinales, rituales con plantas, amuletos herbales y recetas de grimorios.</div>
+            <div class="cap-hint">Escribe: <em>"plantas para atraer amor"</em></div>
+          </div>
+
+          <div class="cap-card">
+            <div class="cap-icon">🕯</div>
+            <div class="cap-name">Magia &amp; Rituales</div>
+            <div class="cap-desc">Hechizos, velas, runas, sigilos, magia simpática, limpieza energética y protección.</div>
+            <div class="cap-hint">Escribe: <em>"ritual para abundancia"</em></div>
+          </div>
+
+          <div class="cap-card">
+            <div class="cap-icon">📖</div>
+            <div class="cap-name">Grimorios &amp; Ocultismo</div>
+            <div class="cap-desc">Conocimiento de grimoires ancestrales, alquimia, cábala, numerología y simbolismo esotérico.</div>
+            <div class="cap-hint">Escribe: <em>"¿qué es la cábala?"</em></div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- ── COMENTARIOS ──────────────────── -->
+      <div class="reviews-section">
+
+        <div class="reviews-title">✦ Experiencias del Oráculo ✦</div>
+
+        <!-- Formulario -->
+        <div class="review-form-wrap">
+          <div class="review-form-label">Comparte tu consulta</div>
+          <div class="star-selector" id="starSelector">
+            <span class="star-opt" data-v="1">★</span>
+            <span class="star-opt" data-v="2">★</span>
+            <span class="star-opt" data-v="3">★</span>
+            <span class="star-opt" data-v="4">★</span>
+            <span class="star-opt" data-v="5">★</span>
+          </div>
+          <input  id="reviewName" class="review-input" type="text"     placeholder="Tu nombre (o alias)" maxlength="60">
+          <textarea id="reviewText" class="review-input review-textarea" placeholder="¿Qué te reveló el Oráculo?" maxlength="600" rows="3"></textarea>
+          <button class="review-submit-btn" id="reviewSubmitBtn">Publicar ✦</button>
+          <div class="review-msg" id="reviewMsg"></div>
+        </div>
+
+        <!-- Lista de comentarios -->
+        <div class="reviews-list" id="reviewsList">
+          <div class="reviews-loading">Cargando experiencias...</div>
+        </div>
+
+      </div>
+
+      <!-- ── FOOTER ────────────────────────── -->
+      <div class="abundia-footer">
+        <span>✦ ABUND-IA ✦</span>
+        <span class="footer-sep">·</span>
+        <span>Conocimiento esotérico con inteligencia artificial</span>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── DUENDES — fuera del oracle, ambientando la página ── -->
+  <div class="gnomes-ambient">
+    <img src="images/gnome1.jpg" alt="Duende" style="animation-delay:0s">
+    <img src="images/gnome2.jpg" alt="Duende" style="animation-delay:2s">
+    <img src="images/gnome3.jpg" alt="Duende" style="animation-delay:4s">
+  </div>
+
+  <!-- ── HERBARIO — decoración lateral ── -->
+  <div class="neon-plant neon-plant-left">
+    <img src="images/herbarium.png" loading="lazy" alt="">
+  </div>
+  <div class="neon-plant neon-plant-right">
+    <img src="images/herbarium.png" loading="lazy" alt="">
+  </div>
+
+  <!-- ── MODAL BIENVENIDA ─────────────────────── -->
+  <div id="welcomeModal" class="welcome-modal hidden">
+    <div class="welcome-modal-inner">
+      <div class="welcome-modal-glyph">𓂀</div>
+      <h2 class="welcome-modal-title">Bienvenido al Oráculo</h2>
+      <p class="welcome-modal-sub">Para personalizar tu experiencia, cuéntame algo sobre ti.</p>
+
+      <div class="welcome-field">
+        <label class="welcome-label">Nombre o alias espiritual</label>
+        <input type="text" id="wName" class="welcome-input" placeholder="Tu nombre..." maxlength="40" autocomplete="off">
+      </div>
+
+      <div class="welcome-field">
+        <label class="welcome-label">Tu signo zodiacal</label>
+        <select id="wZodiac" class="welcome-input welcome-select">
+          <option value="">— Selecciona —</option>
+          <option value="Aries">♈ Aries</option>
+          <option value="Tauro">♉ Tauro</option>
+          <option value="Géminis">♊ Géminis</option>
+          <option value="Cáncer">♋ Cáncer</option>
+          <option value="Leo">♌ Leo</option>
+          <option value="Virgo">♍ Virgo</option>
+          <option value="Libra">♎ Libra</option>
+          <option value="Escorpio">♏ Escorpio</option>
+          <option value="Sagitario">♐ Sagitario</option>
+          <option value="Capricornio">♑ Capricornio</option>
+          <option value="Acuario">♒ Acuario</option>
+          <option value="Piscis">♓ Piscis</option>
+        </select>
+      </div>
+
+      <div class="welcome-field">
+        <label class="welcome-label">Idioma preferido</label>
+        <select id="wLang" class="welcome-input welcome-select">
+          <option value="es">🇪🇸 Español</option>
+          <option value="en">🇬🇧 English</option>
+          <option value="pt">🇧🇷 Português</option>
+          <option value="fr">🇫🇷 Français</option>
+          <option value="de">🇩🇪 Deutsch</option>
+          <option value="it">🇮🇹 Italiano</option>
+        </select>
+      </div>
+
+      <button id="wSubmit" class="welcome-submit">☥ Entrar al Oráculo</button>
+      <button id="wSkip" class="welcome-skip">omitir</button>
+    </div>
+  </div>
+
+  <script src="app.js?v=11"></script>
+</body>
+</html>
