@@ -2,6 +2,17 @@
 const PROFILE_KEY  = 'abundia_profile';
 const MEMORY_KEY   = 'abundia_memory';
 const TTS_AUTO_KEY = 'abundia_tts_auto';
+const UID_KEY      = 'abundia_uid';
+
+function getOrCreateUid() {
+  let uid = localStorage.getItem(UID_KEY);
+  if (!uid) {
+    uid = 'u-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 9);
+    localStorage.setItem(UID_KEY, uid);
+  }
+  return uid;
+}
+const USER_UID = getOrCreateUid();
 
 function loadProfile() {
   try { return JSON.parse(localStorage.getItem(PROFILE_KEY)) || null; }
@@ -466,7 +477,7 @@ async function handleConsciousnessTest(consulta) {
         const res = await fetch('/api/oracle', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ messages: [...conversationHistory, { role: 'user', content: prompt }], userProfile: userProfile || null, userMemory: loadMemory() || null }),
+          body: JSON.stringify({ messages: [...conversationHistory, { role: 'user', content: prompt }], userProfile: userProfile || null, userMemory: loadMemory() || null, uid: USER_UID }),
         });
         const data = await res.json();
         typingEl.remove();
@@ -560,6 +571,9 @@ document.addEventListener('DOMContentLoaded', () => {
   } else {
     initProfileFromStorage();
   }
+
+  // Cargar memoria del servidor en segundo plano
+  loadRemoteMemory();
 
   const ttsBtn = document.getElementById('ttsAutoBtn');
   if (ttsBtn) {
@@ -1201,7 +1215,7 @@ async function handleTarotReading(consulta) {
         const res = await fetch('/api/oracle', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ messages: apiMessages, userProfile: userProfile || null, userMemory: loadMemory() || null }),
+          body: JSON.stringify({ messages: apiMessages, userProfile: userProfile || null, userMemory: loadMemory() || null, uid: USER_UID }),
         });
         const data = await res.json();
         typingEl.remove();
@@ -1210,7 +1224,7 @@ async function handleTarotReading(consulta) {
         conversationHistory.push({ role: 'user', content: prompt });
         conversationHistory.push({ role: 'assistant', content: reply });
         if (conversationHistory.length > MAX_HISTORY) conversationHistory = conversationHistory.slice(-MAX_HISTORY);
-        if (conversationHistory.length % 10 === 0) generateMemory();
+        if (conversationHistory.length % 6 === 0) generateMemory();
 
         appendMessageTyped('oracle', reply, () => {
           isWaiting = false;
@@ -1259,7 +1273,7 @@ async function callOracle(text, imgBase64, imgType) {
     const res = await fetch('/api/oracle', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ messages: apiMessages, userProfile: userProfile || null, userMemory: loadMemory() || null }),
+      body: JSON.stringify({ messages: apiMessages, userProfile: userProfile || null, userMemory: loadMemory() || null, uid: USER_UID }),
     });
     const data = await res.json();
     typingEl.remove();
@@ -1271,7 +1285,7 @@ async function callOracle(text, imgBase64, imgType) {
     if (conversationHistory.length > MAX_HISTORY) {
       conversationHistory = conversationHistory.slice(-MAX_HISTORY);
     }
-    if (conversationHistory.length % 10 === 0) generateMemory();
+    if (conversationHistory.length % 6 === 0) generateMemory();
 
     appendMessageTyped('oracle', reply, () => {
       isWaiting = false;
@@ -1287,7 +1301,7 @@ async function callOracle(text, imgBase64, imgType) {
   }
 }
 
-// ─── Generación de memoria ───────────────────
+// ─── Generación y persistencia de memoria ────
 async function generateMemory() {
   if (conversationHistory.length < 6) return;
   try {
@@ -1299,6 +1313,34 @@ async function generateMemory() {
     if (!res.ok) return;
     const data = await res.json();
     if (data.summary) saveMemory(data.summary);
+
+    // Guardar memoria estructurada en el servidor
+    await fetch('/api/memory', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        uid:      USER_UID,
+        profile:  userProfile || null,
+        summary:  data.summary  || '',
+        topics:   data.topics   || [],
+        insights: data.insights || '',
+      }),
+    });
+  } catch { /* silencioso */ }
+}
+
+async function loadRemoteMemory() {
+  try {
+    const res = await fetch('/api/memory?uid=' + USER_UID);
+    if (!res.ok) return;
+    const data = await res.json();
+    if (data.memory?.summary) {
+      // Fusionar con la memoria local si la remota es más rica
+      const local = loadMemory();
+      if (!local || data.memory.summary.length > local.length) {
+        saveMemory(data.memory.summary);
+      }
+    }
   } catch { /* silencioso */ }
 }
 

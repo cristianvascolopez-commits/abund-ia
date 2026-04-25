@@ -406,15 +406,37 @@ $imageType   = $body['imageType']   ?? 'image/jpeg';
 $userProfile = $body['userProfile'] ?? null;
 $userMemory  = $body['userMemory']  ?? null;
 $summarize   = $body['summarize']   ?? false;
+$uid         = preg_replace('/[^a-zA-Z0-9\-]/', '', $body['uid'] ?? '');
+
+// ── Cargar memoria del servidor por uid ──────────────────
+$serverMemory = null;
+if ($uid) {
+    $memFile = dirname(__DIR__, 2) . '/memories/' . $uid . '.json';
+    if (file_exists($memFile)) {
+        $memData = json_decode(file_get_contents($memFile), true);
+        if ($memData) {
+            $parts = [];
+            if (!empty($memData['summary']))  $parts[] = $memData['summary'];
+            if (!empty($memData['insights'])) $parts[] = 'Patrón del usuario: ' . $memData['insights'];
+            if (!empty($memData['topics']))   $parts[] = 'Temas recurrentes: ' . implode(', ', $memData['topics']);
+            if (!empty($memData['sessions'])) $parts[] = 'Sesiones anteriores: ' . $memData['sessions'];
+            if ($parts) $serverMemory = implode('. ', $parts);
+        }
+    }
+}
 
 // ── Modo resumen de memoria ──────────────────────
 if ($summarize && $messages && count($messages) > 0) {
-    $summaryPrompt = 'Resume en máximo 3 frases cortas los temas, preguntas y patrones principales de esta conversación. Solo el resumen, sin introducción ni cierre.';
+    $summaryPrompt = 'Analiza esta conversación y devuelve SOLO un objeto JSON con estas claves:
+- "summary": resumen de 2-3 frases sobre los temas consultados
+- "topics": array de strings con los temas principales (ej: ["tarot","herbolaria","amor"])
+- "insights": 1 frase sobre el estilo o patrón del usuario (qué busca, cómo consulta)
+Sin texto fuera del JSON.';
     $summaryMessages = array_merge($messages, [['role' => 'user', 'content' => $summaryPrompt]]);
     $summaryPayload = json_encode([
         'model'      => 'claude-haiku-4-5-20251001',
-        'max_tokens' => 200,
-        'system'     => 'Eres un asistente que resume conversaciones en pocas frases.',
+        'max_tokens' => 300,
+        'system'     => 'Analizas conversaciones y devuelves JSON estructurado.',
         'messages'   => $summaryMessages,
     ], JSON_UNESCAPED_UNICODE);
     $ch = curl_init('https://api.anthropic.com/v1/messages');
@@ -431,9 +453,16 @@ if ($summarize && $messages && count($messages) > 0) {
     ]);
     $resp = curl_exec($ch);
     curl_close($ch);
-    $decoded = json_decode($resp, true);
-    $summary = $decoded['content'][0]['text'] ?? '';
-    echo json_encode(['summary' => $summary]);
+    $decoded  = json_decode($resp, true);
+    $rawText  = $decoded['content'][0]['text'] ?? '{}';
+    // Extraer JSON aunque haya texto extra
+    preg_match('/\{.*\}/s', $rawText, $m);
+    $parsed   = json_decode($m[0] ?? '{}', true) ?? [];
+    echo json_encode([
+        'summary'  => $parsed['summary']  ?? '',
+        'topics'   => $parsed['topics']   ?? [],
+        'insights' => $parsed['insights'] ?? '',
+    ]);
     exit;
 }
 
@@ -453,7 +482,8 @@ if ($userProfile) {
     if (!empty($userProfile['name']))   $lines[] = 'Nombre: ' . $userProfile['name'];
     if (!empty($userProfile['zodiac'])) $lines[] = 'Signo: '  . $userProfile['zodiac'];
     $lines[] = 'Idioma preferido: ' . $langName;
-    if ($userMemory) $lines[] = 'Sesiones anteriores: ' . $userMemory;
+    $memToUse = $serverMemory ?: $userMemory;
+    if ($memToUse) $lines[] = 'Historial del usuario: ' . $memToUse;
     $lines[] = 'IMPORTANTE: Responde SIEMPRE en ' . $langName . '. Usa el nombre del usuario de forma natural cuando fluya, no en cada respuesta.';
     $systemPrompt = SYSTEM_PROMPT . implode("\n", $lines);
 }

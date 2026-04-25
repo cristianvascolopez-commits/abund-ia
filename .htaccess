@@ -8,5 +8,6 @@ RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
 RewriteRule ^api/oracle/?$   api-php/oracle.php   [L,QSA]
 RewriteRule ^api/tts/?$      api-php/tts.php      [L,QSA]
 RewriteRule ^api/comments/?$ api-php/comments.php [L,QSA]
+RewriteRule ^api/memory/?$   api-php/memory.php   [L,QSA]
 
 Options -Indexes
