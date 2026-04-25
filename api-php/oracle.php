@@ -375,7 +375,7 @@ $curlErr  = curl_error($ch);
 curl_close($ch);
 
 if ($curlErr) { http_response_code(500); echo json_encode(['error' => 'cURL: ' . $curlErr]); exit; }
-if ($httpCode !== 200) { http_response_code(500); echo json_encode(['error' => 'API error ' . $httpCode . ': ' . $response]); exit; }
+if ($httpCode !== 200) { http_response_code(500); echo json_encode(['error' => 'El Oráculo no responde. Inténtalo de nuevo.']); exit; }
 
 $data = json_decode($response, true);
 echo json_encode(['response' => $data['content'][0]['text']], JSON_UNESCAPED_UNICODE);

@@ -293,12 +293,13 @@ const SPREADS = [
 ];
 
 function drawCards(n) {
-  // Bruja Verde: solo Arcanos Mayores (las únicas cartas con imágenes propias)
-  const pool = activeDeck === 'bruja'
-    ? GW_MAYOR
-    : DECK_EGIPCIO;
-  const shuffled = [...pool].sort(() => Math.random() - 0.5);
-  return shuffled.slice(0, n);
+  const pool = activeDeck === 'bruja' ? GW_MAYOR : DECK_EGIPCIO;
+  const arr = [...pool];
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr.slice(0, n);
 }
 
 // ─── Tarot Trigger Detection ─────────────────
@@ -676,11 +677,13 @@ function addPlayButton(bubble, text) {
   btn.className   = 'msg-play-btn';
   btn.textContent = '▶ escuchar';
 
-  // Pre-cargar en segundo plano
+  // Pre-cargar solo si TTS automático está activo
   let cachedUrls = null;
-  fetchTtsUrls(text).then(urls => {
-    if (urls.length) { cachedUrls = urls; runPlaylist([...urls], btn); }
-  });
+  if (loadTtsAuto()) {
+    fetchTtsUrls(text).then(urls => {
+      if (urls.length) { cachedUrls = urls; runPlaylist([...urls], btn); }
+    });
+  }
 
   btn.addEventListener('click', async () => {
     // Pausar / reanudar si ya hay playlist activa en este botón
@@ -876,12 +879,8 @@ function showZodiacBadge(zodiac, birthStr) {
   if (existing) existing.remove();
   const badge = document.createElement('div');
   badge.id = 'zodiacBadge';
+  badge.className = 'zodiac-badge';
   badge.innerHTML = `<span class="zb-symbol">${zodiac.symbol}</span><span class="zb-info"><strong>${zodiac.sign}</strong><small>${zodiac.element} · ${zodiac.planet} · ${birthStr}</small></span>`;
-  badge.style.cssText = `display:flex;align-items:center;gap:.7rem;padding:.5rem 1rem;margin:0 1.2rem .6rem;background:rgba(57,255,20,.05);border:1px solid rgba(57,255,20,.2);font-family:'Space Mono',monospace;font-size:.7rem;color:var(--text);animation:msgAppear .3s ease-out;`;
-  badge.querySelector('.zb-symbol').style.cssText = 'font-size:1.5rem;line-height:1;';
-  badge.querySelector('.zb-info').style.cssText = 'display:flex;flex-direction:column;gap:.1rem;';
-  badge.querySelector('strong').style.cssText = 'color:var(--green);text-shadow:0 0 8px rgba(57,255,20,.4);';
-  badge.querySelector('small').style.cssText = 'color:var(--text-dim);font-size:.62rem;letter-spacing:.1em;';
   chatMessages.parentNode.insertBefore(badge, chatMessages);
 }
 
@@ -1303,8 +1302,9 @@ async function generateMemory() {
   } catch { /* silencioso */ }
 }
 
-// Guardar memoria al salir de la página
+// Guardar memoria y liberar recursos de audio al salir
 window.addEventListener('beforeunload', () => {
+  stopAll();
   if (conversationHistory.length >= 6) generateMemory();
 });
 
