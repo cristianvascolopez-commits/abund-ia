@@ -599,152 +599,116 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 });
 
-// ─── TTS (Texto a Voz) ────────────────────────
-let currentAudio    = null;
-let currentPlaylist = null;
+// ─── TTS — Web Speech API (gratuito, sin límites) ────────
+const TTS_LANG_MAP = { es:'es-ES', en:'en-US', pt:'pt-BR', fr:'fr-FR', de:'de-DE', it:'it-IT' };
+let   ttsCurrentBtn = null;
+let   ttsKeepAlive  = null;   // intervalo para el bug de Chrome que corta a los 15s
 
-function splitTtsChunks(text, maxLen = 2000) {
-  if (text.length <= maxLen) return [text];
-  const chunks = [];
-  let rest = text;
-  while (rest.length > maxLen) {
-    let cut = maxLen;
-    for (const sep of ['. ', '.\n', '! ', '? ', '\n', ', ', ' ']) {
-      const idx = rest.lastIndexOf(sep, maxLen);
-      if (idx > maxLen * 0.5) { cut = idx + sep.length; break; }
-    }
-    chunks.push(rest.slice(0, cut).trim());
-    rest = rest.slice(cut).trim();
-  }
-  if (rest) chunks.push(rest);
-  return chunks;
+// Seleccionar la mejor voz disponible para el idioma
+function pickVoice(langCode) {
+  const voices = window.speechSynthesis.getVoices();
+  if (!voices.length) return null;
+  const lang2 = langCode.slice(0, 2).toLowerCase();
+  // Prioridad: neural online → local del idioma → cualquiera del idioma
+  return voices.find(v => v.lang.toLowerCase().startsWith(lang2) && !v.localService)
+      || voices.find(v => v.lang.toLowerCase().startsWith(lang2))
+      || null;
 }
 
-async function fetchTtsUrls(text) {
-  const lang   = userProfile?.language || 'es';
-  const chunks = splitTtsChunks(text);
-  const urls   = [];
-  for (const chunk of chunks) {
-    try {
-      const res = await fetch('/api/tts', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ text: chunk, language: lang }),
-      });
-      if (!res.ok) {
-        console.warn('[TTS] Error del servidor:', res.status);
-        continue;
-      }
-      const blob = await res.blob();
-      if (blob.size < 100) { console.warn('[TTS] Blob vacío'); continue; }
-      urls.push(URL.createObjectURL(blob));
-    } catch (err) {
-      console.warn('[TTS] Fetch fallido:', err);
-    }
-  }
-  return urls;
+// Dividir en frases cortas para evitar cortes bruscos
+function splitForSpeech(text) {
+  return text.match(/[^.!?\n]{1,200}(?:[.!?\n]|$)/g) || [text];
 }
 
 function stopAll() {
-  if (currentAudio)    { currentAudio.pause(); currentAudio = null; }
-  if (currentPlaylist) { currentPlaylist.dead = true; currentPlaylist = null; }
+  if (window.speechSynthesis) window.speechSynthesis.cancel();
+  clearInterval(ttsKeepAlive);
+  ttsKeepAlive = null;
+  if (ttsCurrentBtn) {
+    ttsCurrentBtn.textContent = '▶ escuchar';
+    ttsCurrentBtn.classList.remove('playing');
+    ttsCurrentBtn = null;
+  }
   document.querySelectorAll('.msg-play-btn.playing').forEach(b => {
     b.textContent = '▶ escuchar';
     b.classList.remove('playing');
-    delete b._pl;
   });
 }
 
-function runPlaylist(urls, btnEl) {
+function speakText(text, btnEl) {
+  if (!window.speechSynthesis) return;
   stopAll();
-  const pl = { urls, index: 0, dead: false, audio: null };
-  currentPlaylist   = pl;
-  btnEl._pl         = pl;
+
+  const lang     = TTS_LANG_MAP[userProfile?.language || 'es'] || 'es-ES';
+  const chunks   = splitForSpeech(text);
+  let   index    = 0;
+  ttsCurrentBtn  = btnEl;
   btnEl.textContent = '⏸ pausar';
   btnEl.classList.add('playing');
-  btnEl.disabled    = false;
 
-  const next = () => {
-    if (pl.dead || pl.index >= pl.urls.length) {
-      if (!pl.dead) {
-        btnEl.textContent = '▶ escuchar';
-        btnEl.classList.remove('playing');
-        delete btnEl._pl;
-        if (currentPlaylist === pl) currentPlaylist = null;
-        pl.urls.forEach(u => URL.revokeObjectURL(u));
-      }
-      currentAudio = null;
-      return;
-    }
-    const audio = new Audio(pl.urls[pl.index]);
-    currentAudio = audio;
-    pl.audio     = audio;
-    audio.onended = () => { pl.index++; next(); };
-    audio.play().catch(() => {
-      // Autoplay bloqueado por el navegador — reset silencioso, URLs intactas
+  // Fix bug Chrome: speechSynthesis se pausa sola pasados ~15s
+  ttsKeepAlive = setInterval(() => {
+    if (!window.speechSynthesis.speaking) { clearInterval(ttsKeepAlive); return; }
+    window.speechSynthesis.pause();
+    window.speechSynthesis.resume();
+  }, 12000);
+
+  function next() {
+    if (index >= chunks.length) {
+      clearInterval(ttsKeepAlive);
       btnEl.textContent = '▶ escuchar';
       btnEl.classList.remove('playing');
-      delete btnEl._pl;
-      if (currentPlaylist === pl) currentPlaylist = null;
-      currentAudio = null;
-      pl.dead = true;
-      // NO se revocan las URLs para que el clic manual las pueda usar
-    });
-  };
-  next();
+      if (ttsCurrentBtn === btnEl) ttsCurrentBtn = null;
+      return;
+    }
+    const utt   = new SpeechSynthesisUtterance(chunks[index]);
+    utt.lang    = lang;
+    utt.rate    = 0.93;
+    utt.pitch   = 1.0;
+    utt.volume  = 1.0;
+    const voice = pickVoice(lang);
+    if (voice) utt.voice = voice;
+    utt.onend   = () => { index++; next(); };
+    utt.onerror = () => { index++; next(); };
+    window.speechSynthesis.speak(utt);
+  }
+
+  // Las voces pueden no estar listas aún en el primer uso
+  if (window.speechSynthesis.getVoices().length) {
+    next();
+  } else {
+    window.speechSynthesis.onvoiceschanged = () => { window.speechSynthesis.onvoiceschanged = null; next(); };
+  }
 }
 
 function addPlayButton(bubble, text) {
+  if (!window.speechSynthesis) return; // navegador sin soporte
+
   const btn = document.createElement('button');
   btn.className   = 'msg-play-btn';
   btn.textContent = '▶ escuchar';
 
-  // Pre-cargar siempre en segundo plano para que el click sea instantáneo
-  let cachedUrls = null;
-  let fetchDone  = false;
-  fetchTtsUrls(text).then(urls => {
-    fetchDone = true;
-    if (!urls.length) { btn.title = 'Audio no disponible'; return; }
-    cachedUrls = urls;
-    // Auto-reproducir solo si TTS automático está activo
-    if (loadTtsAuto()) runPlaylist([...urls], btn);
-  }).catch(() => { fetchDone = true; });
+  // Auto-reproducir si TTS automático está activo (requiere interacción previa del usuario)
+  if (loadTtsAuto()) {
+    // Pequeño delay para que el navegador permita autoplay tras la interacción del chat
+    setTimeout(() => speakText(text, btn), 300);
+  }
 
-  btn.addEventListener('click', async () => {
-    // Pausar / reanudar si hay playlist activa en este botón
-    if (btn._pl?.audio) {
-      const a = btn._pl.audio;
-      if (!a.paused) {
-        a.pause();
-        btn.textContent = '▶ escuchar';
-        btn.classList.remove('playing');
-      } else {
-        a.play().catch(() => {});
+  btn.addEventListener('click', () => {
+    // Si este botón ya está reproduciendo → pausar/reanudar
+    if (ttsCurrentBtn === btn) {
+      if (window.speechSynthesis.paused) {
+        window.speechSynthesis.resume();
         btn.textContent = '⏸ pausar';
-        btn.classList.add('playing');
+      } else if (window.speechSynthesis.speaking) {
+        window.speechSynthesis.pause();
+        btn.textContent = '▶ escuchar';
+      } else {
+        speakText(text, btn);
       }
       return;
     }
-
-    // Si la pre-carga ya terminó y hay URLs, usarlas
-    if (fetchDone && cachedUrls?.length) {
-      runPlaylist([...cachedUrls], btn);
-      return;
-    }
-
-    // Fetch aún en curso o falló — obtener fresh
-    btn.textContent = '⏳';
-    btn.disabled    = true;
-    const urls = cachedUrls?.length ? [...cachedUrls] : await fetchTtsUrls(text);
-    btn.disabled = false;
-
-    if (urls.length) {
-      cachedUrls = urls;
-      runPlaylist(urls, btn);
-    } else {
-      btn.textContent = '⚠ sin audio';
-      setTimeout(() => { btn.textContent = '▶ escuchar'; }, 3000);
-    }
+    speakText(text, btn);
   });
 
   bubble.appendChild(btn);
