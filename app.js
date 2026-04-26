@@ -604,20 +604,44 @@ const TTS_LANG_MAP = { es:'es-ES', en:'en-US', pt:'pt-BR', fr:'fr-FR', de:'de-DE
 let   ttsCurrentBtn = null;
 let   ttsKeepAlive  = null;   // intervalo para el bug de Chrome que corta a los 15s
 
-// Seleccionar la mejor voz disponible para el idioma
+// Seleccionar la mejor voz disponible para el idioma (prioriza Neural/Natural de Edge/Chrome)
 function pickVoice(langCode) {
   const voices = window.speechSynthesis.getVoices();
   if (!voices.length) return null;
-  const lang2 = langCode.slice(0, 2).toLowerCase();
-  // Prioridad: neural online → local del idioma → cualquiera del idioma
-  return voices.find(v => v.lang.toLowerCase().startsWith(lang2) && !v.localService)
-      || voices.find(v => v.lang.toLowerCase().startsWith(lang2))
-      || null;
+  const lang2     = langCode.slice(0, 2).toLowerCase();
+  const langLower = langCode.toLowerCase();
+
+  function score(v) {
+    const n = v.name.toLowerCase();
+    const l = v.lang.toLowerCase();
+    let s = 0;
+    if (l === langLower)                                              s += 30;
+    else if (l.startsWith(lang2))                                     s += 10;
+    else                                                              s -= 500; // idioma equivocado
+    if (n.includes('natural') || n.includes('neural'))               s += 200;
+    if (n.includes('online'))                                         s += 100;
+    if (!v.localService)                                              s +=  50;
+    if (n.includes('espeak') || n.includes('mbrola') ||
+        n.includes('android') || n.includes('tts'))                  s -= 300;
+    return s;
+  }
+
+  const best = voices.filter(v => v.lang.toLowerCase().startsWith(lang2))
+                     .sort((a, b) => score(b) - score(a));
+  return best[0] || null;
 }
 
-// Dividir en frases cortas para evitar cortes bruscos
+// Dividir en frases respetando pausas naturales (puntos, signos, saltos)
 function splitForSpeech(text) {
-  return text.match(/[^.!?\n]{1,200}(?:[.!?\n]|$)/g) || [text];
+  // Eliminar markdown y símbolos esotéricos que suenan mal en voz
+  const clean = text
+    .replace(/\*\*(.*?)\*\*/g, '$1')
+    .replace(/\*(.*?)\*/g, '$1')
+    .replace(/#{1,6}\s/g, '')
+    .replace(/[☥𓂀𓇳✦•·─]/g, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+  return clean.match(/[^.!?\n…;]{1,180}(?:[.!?\n…;]|$)/g) || [clean];
 }
 
 function stopAll() {
@@ -663,8 +687,8 @@ function speakText(text, btnEl) {
     }
     const utt   = new SpeechSynthesisUtterance(chunks[index]);
     utt.lang    = lang;
-    utt.rate    = 0.93;
-    utt.pitch   = 1.0;
+    utt.rate    = 0.88;   // más pausado = más natural
+    utt.pitch   = 0.95;   // tono ligeramente más grave, menos robótico
     utt.volume  = 1.0;
     const voice = pickVoice(lang);
     if (voice) utt.voice = voice;
