@@ -827,6 +827,30 @@ function addPlayButton(bubble, text) {
   bubble.appendChild(btn);
 }
 
+function addCopyButton(bubble, text) {
+  const btn = document.createElement('button');
+  btn.className   = 'msg-copy-btn';
+  btn.textContent = '⎘ copiar';
+  btn.title       = 'Copiar texto';
+  btn.addEventListener('click', () => {
+    const clean = text.replace(/\*\*(.*?)\*\*/g, '$1').replace(/\*(.*?)\*/g, '$1').replace(/#{1,6}\s/g, '').trim();
+    navigator.clipboard.writeText(clean).then(() => {
+      btn.textContent = '✓ copiado';
+      setTimeout(() => { btn.textContent = '⎘ copiar'; }, 2000);
+    }).catch(() => {
+      // Fallback para navegadores sin clipboard API
+      const ta = document.createElement('textarea');
+      ta.value = clean; ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.appendChild(ta); ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+      btn.textContent = '✓ copiado';
+      setTimeout(() => { btn.textContent = '⎘ copiar'; }, 2000);
+    });
+  });
+  bubble.appendChild(btn);
+}
+
 // ─── Oracle State ────────────────────────────
 const chatMessages    = document.getElementById('chatMessages');
 const messageInput    = document.getElementById('messageInput');
@@ -971,6 +995,7 @@ function appendMessageTyped(role, text, onComplete) {
     } else {
       cursor.remove();
       addPlayButton(bubble, text);
+      addCopyButton(bubble, text);
       if (onComplete) onComplete();
     }
   }

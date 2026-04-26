@@ -2051,6 +2051,29 @@ body.oracle-only .oraculo-container::before { display: none; }
   50%     { box-shadow: 0 0 14px rgba(57,255,20,.7), 0 0 28px rgba(57,255,20,.3); }
 }
 
+.msg-copy-btn {
+  background: rgba(180,130,255,.08);
+  border: 1px solid rgba(180,130,255,.35);
+  color: rgba(200,160,255,.85);
+  font-size: .72rem;
+  cursor: pointer;
+  padding: .28rem .85rem;
+  margin-top: .55rem;
+  margin-left: .4rem;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 20px;
+  transition: all .2s;
+  letter-spacing: .06em;
+}
+.msg-copy-btn:hover {
+  background: rgba(180,130,255,.2);
+  border-color: rgba(180,130,255,.7);
+  color: #d4aaff;
+  box-shadow: 0 0 10px rgba(180,130,255,.4);
+  transform: scale(1.05);
+}
+
 /* ── Controles cabecera ─────────────────────── */
 .oraculo-header-controls {
   display: flex;
