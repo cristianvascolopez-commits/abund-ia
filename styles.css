@@ -2181,3 +2181,54 @@ body.oracle-only .oraculo-container::before { display: none; }
 body.oracle-only .chat-messages {
   max-height: calc(100vh - 258px);
 }
+
+/* ── Luna de Hoy ──────────────────────────── */
+.luna-section {
+  padding: 0 1rem 1.2rem;
+}
+.luna-card {
+  background: rgba(8,2,20,0.88);
+  border: 1px solid rgba(245,200,60,0.22);
+  border-radius: 18px;
+  padding: 1.2rem 1.5rem;
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  box-shadow: 0 0 30px rgba(245,200,60,0.07), inset 0 0 25px rgba(245,200,60,0.03);
+}
+.luna-canvas-wrap { flex-shrink: 0; }
+#moonCanvas {
+  display: block;
+  filter: drop-shadow(0 0 14px rgba(245,200,60,0.55));
+}
+.luna-info { flex: 1; min-width: 0; }
+.luna-titulo {
+  font-size: 0.68rem;
+  letter-spacing: 0.18em;
+  color: rgba(245,200,60,0.7);
+  text-transform: uppercase;
+  margin-bottom: 0.4rem;
+}
+.luna-fase {
+  font-family: 'Cinzel', serif;
+  font-size: 1.15rem;
+  font-weight: 600;
+  color: #f5e168;
+  text-shadow: 0 0 14px rgba(245,220,80,0.65);
+  margin-bottom: 0.2rem;
+}
+.luna-porcentaje {
+  font-size: 0.75rem;
+  color: rgba(245,200,60,0.55);
+  margin-bottom: 0.55rem;
+}
+.luna-mensaje {
+  font-size: 0.88rem;
+  font-style: italic;
+  color: rgba(255,255,255,0.58);
+  line-height: 1.4;
+}
+@media (max-width: 500px) {
+  .luna-card { flex-direction: column; text-align: center; }
+  #moonCanvas { width: 100px; height: 100px; }
+}

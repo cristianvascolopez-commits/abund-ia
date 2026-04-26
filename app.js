@@ -601,10 +601,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // ─── TTS — Azure Neural (primario) + Web Speech API (fallback) ────────
 const TTS_LANG_MAP = { es:'es-ES', en:'en-US', pt:'pt-BR', fr:'fr-FR', de:'de-DE', it:'it-IT' };
-let ttsCurrentBtn  = null;
-let ttsKeepAlive   = null;
-let ttsAudioEl     = null;   // elemento Audio para Azure TTS
-let ttsAzureWorks  = null;   // null=sin probar, true=ok, false=no disponible
+let ttsCurrentBtn   = null;
+let ttsKeepAlive    = null;
+let ttsAudioEl      = null;   // elemento Audio para TTS externo
+let ttsApiWorks     = null;   // null=sin probar, true=ok, false=no disponible
+// Orden de prueba: VoiceRSS → Azure → Web Speech API
+const TTS_API_ENDPOINTS = ['/api/tts-voice', '/api/tts-azure'];
 
 function cleanForSpeech(text) {
   return text
@@ -643,38 +645,40 @@ function stopAll() {
   });
 }
 
-async function speakWithAzure(text, btnEl) {
-  const lang = userProfile?.language || 'es';
-  let res;
-  try {
-    res = await fetch('/api/tts-azure', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: cleanForSpeech(text), language: lang }),
-    });
-  } catch (e) { return false; }
+async function speakWithApi(text, btnEl) {
+  const lang    = userProfile?.language || 'es';
+  const payload = JSON.stringify({ text: cleanForSpeech(text), language: lang });
 
-  if (!res.ok) return false;
-  const ct = res.headers.get('Content-Type') || '';
-  if (!ct.includes('audio')) return false;
+  for (const endpoint of TTS_API_ENDPOINTS) {
+    let res;
+    try {
+      res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: payload,
+      });
+    } catch (e) { continue; }
 
-  const blob = await res.blob();
-  const url  = URL.createObjectURL(blob);
-  const audio = new Audio(url);
-  ttsAudioEl  = audio;
+    if (!res.ok) continue;
+    const ct = res.headers.get('Content-Type') || '';
+    if (!ct.includes('audio')) continue;
 
-  audio.onended = () => {
-    URL.revokeObjectURL(url);
-    ttsAudioEl = null;
-    if (btnEl) {
-      btnEl.textContent = '▶ escuchar';
-      btnEl.classList.remove('playing');
-    }
-    if (ttsCurrentBtn === btnEl) ttsCurrentBtn = null;
-  };
-  audio.onerror = audio.onended;
-  audio.play().catch(() => {});
-  return true;
+    const blob  = await res.blob();
+    const url   = URL.createObjectURL(blob);
+    const audio = new Audio(url);
+    ttsAudioEl  = audio;
+
+    audio.onended = () => {
+      URL.revokeObjectURL(url);
+      ttsAudioEl = null;
+      if (btnEl) { btnEl.textContent = '▶ escuchar'; btnEl.classList.remove('playing'); }
+      if (ttsCurrentBtn === btnEl) ttsCurrentBtn = null;
+    };
+    audio.onerror = audio.onended;
+    audio.play().catch(() => {});
+    return true;
+  }
+  return false;
 }
 
 function speakWithWebSpeech(text, btnEl) {
@@ -736,11 +740,11 @@ async function speakText(text, btnEl) {
   ttsCurrentBtn = btnEl;
   if (btnEl) { btnEl.textContent = '⏸ pausar'; btnEl.classList.add('playing'); }
 
-  // Intentar Azure Neural primero; si falla usar Web Speech API como respaldo
-  if (ttsAzureWorks !== false) {
-    const ok = await speakWithAzure(text, btnEl);
-    if (ok) { ttsAzureWorks = true; return; }
-    ttsAzureWorks = false;
+  // Intentar API externa primero (VoiceRSS → Azure); si falla usar Web Speech API
+  if (ttsApiWorks !== false) {
+    const ok = await speakWithApi(text, btnEl);
+    if (ok) { ttsApiWorks = true; return; }
+    ttsApiWorks = false;
   }
   speakWithWebSpeech(text, btnEl);
 }
@@ -1620,5 +1624,142 @@ window.addEventListener('beforeunload', () => {
   }
 
   loadReviews();
+})();
+
+// ─── Luna de Hoy ─────────────────────────────────────────────────────────────
+(function initLuna() {
+  const canvas = document.getElementById('moonCanvas');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  const cx = W / 2, cy = H / 2, r = W * 0.40;
+
+  // Luna nueva de referencia: 2000-01-06 18:14 UTC
+  const REF_MS   = 947182440000;
+  const CYCLE_MS = 29.53059 * 86400000;
+
+  const FASES = [
+    { max: 1.85,  nombre: 'Luna Nueva',       emoji: '🌑', msg: 'Tiempo de intenciones y nuevos comienzos.' },
+    { max: 7.38,  nombre: 'Luna Creciente',   emoji: '🌒', msg: 'La energía crece — atrae lo que deseas.' },
+    { max: 9.22,  nombre: 'Cuarto Creciente', emoji: '🌓', msg: 'Momento de acción y decisiones.' },
+    { max: 14.77, nombre: 'Gibosa Creciente', emoji: '🌔', msg: 'Refina y perfecciona tus planes.' },
+    { max: 16.61, nombre: 'Luna Llena',       emoji: '🌕', msg: 'Máximo poder ritual — claridad total.' },
+    { max: 22.15, nombre: 'Gibosa Menguante', emoji: '🌖', msg: 'Gratitud y liberación de lo innecesario.' },
+    { max: 23.99, nombre: 'Cuarto Menguante', emoji: '🌗', msg: 'Reflexión y purificación energética.' },
+    { max: 29.53, nombre: 'Luna Menguante',   emoji: '🌘', msg: 'Cierra ciclos, sana y descansa.' },
+  ];
+
+  function getLunaData(date) {
+    const ageMs   = ((date.getTime() - REF_MS) % CYCLE_MS + CYCLE_MS) % CYCLE_MS;
+    const ageDias = ageMs / 86400000;
+    const ratio   = ageDias / 29.53059;       // 0=luna nueva, 0.5=luna llena
+    const ilum    = Math.round((1 - Math.cos(2 * Math.PI * ratio)) / 2 * 100);
+    const fase    = FASES.find(f => ageDias < f.max) || FASES[FASES.length - 1];
+    return { ratio, ageDias, ilum, fase };
+  }
+
+  function drawMoon(ratio) {
+    const LIGHT = '#f5e168';
+    const DARK  = '#07000f';
+    ctx.clearRect(0, 0, W, H);
+
+    // Resplandor exterior
+    const grd = ctx.createRadialGradient(cx, cy, r * 0.1, cx, cy, r * 1.9);
+    grd.addColorStop(0, 'rgba(245,193,50,0.10)');
+    grd.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = grd;
+    ctx.fillRect(0, 0, W, H);
+
+    // Clip al círculo de la luna
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.clip();
+
+    // Fondo oscuro
+    ctx.fillStyle = DARK;
+    ctx.fillRect(cx - r - 1, cy - r - 1, r * 2 + 2, r * 2 + 2);
+
+    const p  = ratio;
+    const xt = Math.cos(2 * Math.PI * p) * r;  // radio horizontal del terminador
+
+    if (p > 0.02 && p < 0.98) {
+      if (p < 0.5) {
+        // Creciente: lado derecho iluminado
+        ctx.fillStyle = LIGHT;
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, -Math.PI / 2, Math.PI / 2, false);
+        ctx.closePath();
+        ctx.fill();
+        if (xt > 0) {
+          // Creciente: sombra recorta el lado derecho
+          ctx.fillStyle = DARK;
+          ctx.beginPath();
+          ctx.ellipse(cx, cy, xt, r, 0, -Math.PI / 2, Math.PI / 2, false);
+          ctx.closePath();
+          ctx.fill();
+        } else {
+          // Gibosa: luz se extiende al lado izquierdo
+          ctx.fillStyle = LIGHT;
+          ctx.beginPath();
+          ctx.ellipse(cx, cy, -xt, r, 0, Math.PI / 2, -Math.PI / 2, false);
+          ctx.closePath();
+          ctx.fill();
+        }
+      } else {
+        // Menguante: lado izquierdo iluminado
+        ctx.fillStyle = LIGHT;
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, Math.PI / 2, -Math.PI / 2, false);
+        ctx.closePath();
+        ctx.fill();
+        if (xt < 0) {
+          // Gibosa menguante: luz se extiende al lado derecho
+          ctx.fillStyle = LIGHT;
+          ctx.beginPath();
+          ctx.ellipse(cx, cy, -xt, r, 0, -Math.PI / 2, Math.PI / 2, false);
+          ctx.closePath();
+          ctx.fill();
+        } else {
+          // Creciente menguante: sombra recorta lado izquierdo
+          ctx.fillStyle = DARK;
+          ctx.beginPath();
+          ctx.ellipse(cx, cy, xt, r, 0, Math.PI / 2, -Math.PI / 2, false);
+          ctx.closePath();
+          ctx.fill();
+        }
+      }
+    }
+    ctx.restore();
+
+    // Anillo de neón dorado
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(245,200,60,0.55)';
+    ctx.lineWidth   = 1.5;
+    ctx.shadowBlur  = 20;
+    ctx.shadowColor = '#f5c842';
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function renderLuna(date) {
+    const { ratio, ageDias, ilum, fase } = getLunaData(date);
+    drawMoon(ratio);
+    document.getElementById('lunaFase').textContent  = fase.emoji + ' ' + fase.nombre;
+    document.getElementById('lunaIlum').textContent  = ilum + '% iluminada · Día ' + Math.floor(ageDias) + ' del ciclo';
+    document.getElementById('lunaMsg').textContent   = fase.msg;
+
+    // Programar actualización a medianoche
+    const ahora     = date;
+    const manana    = new Date(ahora);
+    manana.setDate(manana.getDate() + 1);
+    manana.setHours(0, 0, 5, 0);
+    const msHastaMedianoche = manana - ahora;
+    setTimeout(() => renderLuna(new Date()), msHastaMedianoche);
+  }
+
+  renderLuna(new Date());
 })();
 
