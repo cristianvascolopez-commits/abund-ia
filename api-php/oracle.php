@@ -484,7 +484,11 @@ if (!$message && !$image && (!$messages || !count($messages))) {
 
 // ── Construir system prompt personalizado ────────
 $langNames = ['es'=>'español','en'=>'inglés','pt'=>'portugués','fr'=>'francés','de'=>'alemán','it'=>'italiano'];
-$systemPrompt = SYSTEM_PROMPT;
+// Fecha actual inyectada dinámicamente en cada consulta
+$fechaHoy  = (new DateTime('now', new DateTimeZone('Europe/Madrid')))->format('l, d \d\e F \d\e Y');
+$fechaCtx  = "\n[CONTEXTO TEMPORAL]\nHoy es {$fechaHoy}. Usa esta fecha para: tránsitos astrológicos actuales, temporadas herbales, ciclos lunares, rituales estacionales, y cualquier recomendación que dependa del momento del año. Nunca uses fechas de ejemplo ni años incorrectos.";
+
+$systemPrompt = SYSTEM_PROMPT . $fechaCtx;
 if ($userProfile) {
     $lang     = $userProfile['language'] ?? 'es';
     $langName = $langNames[$lang] ?? 'español';
@@ -495,7 +499,7 @@ if ($userProfile) {
     $memToUse = $serverMemory ?: $userMemory;
     if ($memToUse) $lines[] = 'Historial del usuario: ' . $memToUse;
     $lines[] = 'IMPORTANTE: Responde SIEMPRE en ' . $langName . '. Usa el nombre del usuario de forma natural cuando fluya, no en cada respuesta.';
-    $systemPrompt = SYSTEM_PROMPT . implode("\n", $lines);
+    $systemPrompt .= implode("\n", $lines);
 }
 
 if ($messages && count($messages) > 0) {
