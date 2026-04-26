@@ -631,8 +631,16 @@ async function fetchTtsUrls(text) {
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({ text: chunk, language: lang }),
       });
-      if (res.ok) urls.push(URL.createObjectURL(await res.blob()));
-    } catch {}
+      if (!res.ok) {
+        console.warn('[TTS] Error del servidor:', res.status);
+        continue;
+      }
+      const blob = await res.blob();
+      if (blob.size < 100) { console.warn('[TTS] Blob vacío'); continue; }
+      urls.push(URL.createObjectURL(blob));
+    } catch (err) {
+      console.warn('[TTS] Fetch fallido:', err);
+    }
   }
   return urls;
 }
@@ -691,16 +699,19 @@ function addPlayButton(bubble, text) {
   btn.className   = 'msg-play-btn';
   btn.textContent = '▶ escuchar';
 
-  // Pre-cargar solo si TTS automático está activo
+  // Pre-cargar siempre en segundo plano para que el click sea instantáneo
   let cachedUrls = null;
-  if (loadTtsAuto()) {
-    fetchTtsUrls(text).then(urls => {
-      if (urls.length) { cachedUrls = urls; runPlaylist([...urls], btn); }
-    });
-  }
+  let fetchDone  = false;
+  fetchTtsUrls(text).then(urls => {
+    fetchDone = true;
+    if (!urls.length) { btn.title = 'Audio no disponible'; return; }
+    cachedUrls = urls;
+    // Auto-reproducir solo si TTS automático está activo
+    if (loadTtsAuto()) runPlaylist([...urls], btn);
+  }).catch(() => { fetchDone = true; });
 
   btn.addEventListener('click', async () => {
-    // Pausar / reanudar si ya hay playlist activa en este botón
+    // Pausar / reanudar si hay playlist activa en este botón
     if (btn._pl?.audio) {
       const a = btn._pl.audio;
       if (!a.paused) {
@@ -714,13 +725,26 @@ function addPlayButton(bubble, text) {
       }
       return;
     }
-    // Usar URLs en caché si existen, si no hacer fetch fresco
+
+    // Si la pre-carga ya terminó y hay URLs, usarlas
+    if (fetchDone && cachedUrls?.length) {
+      runPlaylist([...cachedUrls], btn);
+      return;
+    }
+
+    // Fetch aún en curso o falló — obtener fresh
     btn.textContent = '⏳';
     btn.disabled    = true;
     const urls = cachedUrls?.length ? [...cachedUrls] : await fetchTtsUrls(text);
     btn.disabled = false;
-    if (urls.length) runPlaylist(urls, btn);
-    else             btn.textContent = '▶ escuchar';
+
+    if (urls.length) {
+      cachedUrls = urls;
+      runPlaylist(urls, btn);
+    } else {
+      btn.textContent = '⚠ sin audio';
+      setTimeout(() => { btn.textContent = '▶ escuchar'; }, 3000);
+    }
   });
 
   bubble.appendChild(btn);
@@ -1363,58 +1387,97 @@ window.addEventListener('beforeunload', () => {
     }
   } else {
     const LANG_MAP = { es:'es-ES', en:'en-US', pt:'pt-BR', fr:'fr-FR', de:'de-DE', it:'it-IT' };
-    let activeRec   = null;
+
+    let isListening  = false;   // el usuario activó el mic
+    let activeRec    = null;
     let silenceTimer = null;
+    let accumulated  = '';      // texto final acumulado entre reinicios
+    let shouldSend   = false;   // solo enviar si el silencio lo disparó
 
-    micBtn.addEventListener('click', () => {
-      if (activeRec) { clearTimeout(silenceTimer); activeRec.stop(); return; }
+    function stopListening(send) {
+      isListening = false;
+      shouldSend  = send;
+      clearTimeout(silenceTimer);
+      if (activeRec) { try { activeRec.stop(); } catch (_) {} }
+      micBtn.classList.remove('listening');
+      micBtn.textContent = '🎤';
+    }
 
+    function startRec() {
       const rec = new SR();
       rec.lang           = LANG_MAP[userProfile?.language || 'es'] || 'es-ES';
-      rec.continuous     = true;   // captura textos largos sin corte
+      rec.continuous     = false;  // más estable cross-browser
       rec.interimResults = true;
-
-      micBtn.classList.add('listening');
-      micBtn.textContent = '⏹';
+      rec.maxAlternatives = 1;
       activeRec = rec;
 
       rec.onresult = (e) => {
-        // Reconstruir transcripción completa de todos los segmentos
-        let final = '', interim = '';
+        let interim = '';
         for (const r of e.results) {
-          if (r.isFinal) final   += r[0].transcript;
-          else           interim += r[0].transcript;
+          if (r.isFinal) accumulated += r[0].transcript + ' ';
+          else           interim      = r[0].transcript;
         }
-        messageInput.value = (final + interim).trim();
+        const display = (accumulated + interim).trim();
+        messageInput.value = display;
         messageInput.style.height = 'auto';
         messageInput.style.height = Math.min(messageInput.scrollHeight, 120) + 'px';
 
-        // Parar solo después de 2.5 s de silencio (el usuario dejó de hablar)
+        // Reiniciar timer de silencio en cada palabra detectada
         clearTimeout(silenceTimer);
-        silenceTimer = setTimeout(() => { if (activeRec) activeRec.stop(); }, 2500);
+        silenceTimer = setTimeout(() => {
+          if (isListening) stopListening(true);
+        }, 2800);
       };
 
       rec.onend = () => {
-        clearTimeout(silenceTimer);
-        micBtn.classList.remove('listening');
-        micBtn.textContent = '🎤';
-        const texto = messageInput.value.trim();
         activeRec = null;
-        if (texto) sendMessage();
+        if (!isListening) {
+          // El usuario detuvo manualmente o el silencio disparó el envío
+          if (shouldSend) {
+            shouldSend = false;
+            const texto = messageInput.value.trim();
+            if (texto) sendMessage();
+          }
+          accumulated = '';
+          return;
+        }
+        // El navegador detuvo la sesión por sí solo (límite de tiempo, pausa)
+        // → reiniciar automáticamente si el usuario no pulsó stop
+        try { startRec(); } catch (_) { stopListening(false); }
       };
 
       rec.onerror = (ev) => {
-        clearTimeout(silenceTimer);
-        micBtn.classList.remove('listening');
-        micBtn.textContent = '🎤';
         activeRec = null;
         if (ev.error === 'not-allowed') {
+          stopListening(false);
+          accumulated = '';
           messageInput.placeholder = '⚠ Permite el micrófono en la barra del navegador';
           setTimeout(() => { messageInput.placeholder = 'Consulta al Oráculo... (Enter para enviar)'; }, 4000);
+        } else if (ev.error === 'no-speech') {
+          // sin voz detectada — reiniciar si sigue escuchando
+          if (isListening) { try { startRec(); } catch (_) { stopListening(false); } }
+        } else {
+          if (isListening) { try { startRec(); } catch (_) { stopListening(false); } }
         }
       };
 
-      rec.start();
+      try { rec.start(); } catch (_) { stopListening(false); }
+    }
+
+    micBtn.addEventListener('click', () => {
+      if (isListening) {
+        // El usuario pulsa stop manualmente — enviar lo que hay
+        stopListening(!!messageInput.value.trim());
+        return;
+      }
+      // Iniciar escucha
+      isListening = true;
+      shouldSend  = false;
+      accumulated = '';
+      messageInput.value = '';
+      micBtn.classList.add('listening');
+      micBtn.textContent = '⏹';
+      startRec();
     });
   }
 }

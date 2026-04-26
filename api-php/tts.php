@@ -1,10 +1,5 @@
 <?php
-$origin = $_SERVER['HTTP_ORIGIN'] ?? '';
-$allowed = ['https://abund-ia.es', 'https://www.abund-ia.es'];
-if (in_array($origin, $allowed)) {
-    header('Access-Control-Allow-Origin: ' . $origin);
-}
-unset($origin, $allowed);
+header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: POST, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type');
 
