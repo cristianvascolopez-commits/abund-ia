@@ -603,10 +603,24 @@ document.addEventListener('DOMContentLoaded', () => {
 const TTS_LANG_MAP = { es:'es-ES', en:'en-US', pt:'pt-BR', fr:'fr-FR', de:'de-DE', it:'it-IT' };
 let ttsCurrentBtn   = null;
 let ttsKeepAlive    = null;
-let ttsAudioEl      = null;   // elemento Audio para TTS externo
-let ttsApiWorks     = null;   // null=sin probar, true=ok, false=no disponible
-// Orden de prueba: VoiceRSS → Azure → Web Speech API
+let ttsAudioEl      = null;
+let ttsApiWorks     = null;
+let ttsUserPaused   = false;  // distingue pausa manual de pausa del SO
 const TTS_API_ENDPOINTS = ['/api/tts-voice', '/api/tts-azure'];
+const IS_MOBILE = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+const IS_IOS    = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+
+// Desbloquear audio en iOS con el primer toque (antes de cualquier fetch)
+let _audioUnlocked = false;
+function _unlockAudio() {
+  if (_audioUnlocked) return;
+  _audioUnlocked = true;
+  const s = new Audio('data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAA' +
+    'EAAQARgAAAIgAAABAAEAZGF0YQAAAAA=');
+  s.play().catch(() => {});
+}
+document.addEventListener('touchstart', _unlockAudio, { once: true, passive: true });
+document.addEventListener('click',      _unlockAudio, { once: true });
 
 function cleanForSpeech(text) {
   return text
@@ -619,12 +633,13 @@ function cleanForSpeech(text) {
 }
 
 function splitForSpeech(text) {
-  const clean = cleanForSpeech(text);
-  return clean.match(/[^.!?\n…;]{1,180}(?:[.!?\n…;]|$)/g) || [clean];
+  const clean     = cleanForSpeech(text);
+  const chunkSize = IS_MOBILE ? 90 : 180;  // chunks más cortos en móvil
+  return clean.match(new RegExp(`[^.!?\\n…;]{1,${chunkSize}}(?:[.!?\\n…;]|$)`, 'g')) || [clean];
 }
 
 function stopAll() {
-  // Detener Azure audio
+  ttsUserPaused = false;
   if (ttsAudioEl) {
     ttsAudioEl.pause();
     ttsAudioEl.src = '';
@@ -665,17 +680,33 @@ async function speakWithApi(text, btnEl) {
 
     const blob  = await res.blob();
     const url   = URL.createObjectURL(blob);
-    const audio = new Audio(url);
-    ttsAudioEl  = audio;
+    const audio = new Audio();
+    audio.setAttribute('playsinline', '');          // iOS: reproducir inline
+    audio.setAttribute('webkit-playsinline', '');
+    audio.preload = 'auto';
+    ttsAudioEl    = audio;
 
-    audio.onended = () => {
+    function onDone() {
       URL.revokeObjectURL(url);
       ttsAudioEl = null;
       if (btnEl) { btnEl.textContent = '▶ escuchar'; btnEl.classList.remove('playing'); }
       if (ttsCurrentBtn === btnEl) ttsCurrentBtn = null;
-    };
-    audio.onerror = audio.onended;
-    audio.play().catch(() => {});
+    }
+    audio.onended = onDone;
+    audio.onerror = onDone;
+
+    // En móvil: auto-reanudar si el SO pausa el audio sin que el usuario lo pidiera
+    if (IS_MOBILE) {
+      audio.addEventListener('pause', () => {
+        if (!audio.ended && ttsAudioEl === audio && !ttsUserPaused) {
+          setTimeout(() => { if (!audio.ended && !ttsUserPaused) audio.play().catch(() => {}); }, 300);
+        }
+      });
+    }
+
+    audio.src = url;
+    audio.load();
+    try { await audio.play(); } catch (_) { onDone(); return false; }
     return true;
   }
   return false;
@@ -687,11 +718,18 @@ function speakWithWebSpeech(text, btnEl) {
   const chunks = splitForSpeech(text);
   let   index  = 0;
 
+  // iOS: comprueba cada 3s y reanuda si se paró solo; desktop: truco pause/resume cada 12s
   ttsKeepAlive = setInterval(() => {
-    if (!window.speechSynthesis.speaking) { clearInterval(ttsKeepAlive); return; }
-    window.speechSynthesis.pause();
-    window.speechSynthesis.resume();
-  }, 12000);
+    if (!window.speechSynthesis.speaking && !window.speechSynthesis.paused) {
+      clearInterval(ttsKeepAlive); return;
+    }
+    if (IS_IOS) {
+      if (window.speechSynthesis.paused) window.speechSynthesis.resume();
+    } else {
+      window.speechSynthesis.pause();
+      window.speechSynthesis.resume();
+    }
+  }, IS_IOS ? 3000 : 12000);
 
   function pickVoice(langCode) {
     const voices = window.speechSynthesis.getVoices();
@@ -760,12 +798,16 @@ function addPlayButton(bubble, text) {
 
   btn.addEventListener('click', () => {
     if (ttsCurrentBtn === btn) {
-      // Toggle pausa para Azure Audio
+      // Toggle pausa para Audio element (VoiceRSS/Azure)
       if (ttsAudioEl) {
         if (ttsAudioEl.paused) {
-          ttsAudioEl.play(); btn.textContent = '⏸ pausar';
+          ttsUserPaused = false;
+          ttsAudioEl.play().catch(() => {});
+          btn.textContent = '⏸ pausar';
         } else {
-          ttsAudioEl.pause(); btn.textContent = '▶ escuchar';
+          ttsUserPaused = true;
+          ttsAudioEl.pause();
+          btn.textContent = '▶ escuchar';
         }
         return;
       }
