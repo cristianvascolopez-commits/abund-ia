@@ -599,52 +599,36 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 });
 
-// ─── TTS — Web Speech API (gratuito, sin límites) ────────
+// ─── TTS — Azure Neural (primario) + Web Speech API (fallback) ────────
 const TTS_LANG_MAP = { es:'es-ES', en:'en-US', pt:'pt-BR', fr:'fr-FR', de:'de-DE', it:'it-IT' };
-let   ttsCurrentBtn = null;
-let   ttsKeepAlive  = null;   // intervalo para el bug de Chrome que corta a los 15s
+let ttsCurrentBtn  = null;
+let ttsKeepAlive   = null;
+let ttsAudioEl     = null;   // elemento Audio para Azure TTS
+let ttsAzureWorks  = null;   // null=sin probar, true=ok, false=no disponible
 
-// Seleccionar la mejor voz disponible para el idioma (prioriza Neural/Natural de Edge/Chrome)
-function pickVoice(langCode) {
-  const voices = window.speechSynthesis.getVoices();
-  if (!voices.length) return null;
-  const lang2     = langCode.slice(0, 2).toLowerCase();
-  const langLower = langCode.toLowerCase();
-
-  function score(v) {
-    const n = v.name.toLowerCase();
-    const l = v.lang.toLowerCase();
-    let s = 0;
-    if (l === langLower)                                              s += 30;
-    else if (l.startsWith(lang2))                                     s += 10;
-    else                                                              s -= 500; // idioma equivocado
-    if (n.includes('natural') || n.includes('neural'))               s += 200;
-    if (n.includes('online'))                                         s += 100;
-    if (!v.localService)                                              s +=  50;
-    if (n.includes('espeak') || n.includes('mbrola') ||
-        n.includes('android') || n.includes('tts'))                  s -= 300;
-    return s;
-  }
-
-  const best = voices.filter(v => v.lang.toLowerCase().startsWith(lang2))
-                     .sort((a, b) => score(b) - score(a));
-  return best[0] || null;
-}
-
-// Dividir en frases respetando pausas naturales (puntos, signos, saltos)
-function splitForSpeech(text) {
-  // Eliminar markdown y símbolos esotéricos que suenan mal en voz
-  const clean = text
+function cleanForSpeech(text) {
+  return text
     .replace(/\*\*(.*?)\*\*/g, '$1')
     .replace(/\*(.*?)\*/g, '$1')
     .replace(/#{1,6}\s/g, '')
     .replace(/[☥𓂀𓇳✦•·─]/g, '')
     .replace(/\s{2,}/g, ' ')
     .trim();
+}
+
+function splitForSpeech(text) {
+  const clean = cleanForSpeech(text);
   return clean.match(/[^.!?\n…;]{1,180}(?:[.!?\n…;]|$)/g) || [clean];
 }
 
 function stopAll() {
+  // Detener Azure audio
+  if (ttsAudioEl) {
+    ttsAudioEl.pause();
+    ttsAudioEl.src = '';
+    ttsAudioEl = null;
+  }
+  // Detener Web Speech API
   if (window.speechSynthesis) window.speechSynthesis.cancel();
   clearInterval(ttsKeepAlive);
   ttsKeepAlive = null;
@@ -659,45 +643,87 @@ function stopAll() {
   });
 }
 
-function speakText(text, btnEl) {
+async function speakWithAzure(text, btnEl) {
+  const lang = userProfile?.language || 'es';
+  let res;
+  try {
+    res = await fetch('/api/tts-azure', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: cleanForSpeech(text), language: lang }),
+    });
+  } catch (e) { return false; }
+
+  if (!res.ok) return false;
+  const ct = res.headers.get('Content-Type') || '';
+  if (!ct.includes('audio')) return false;
+
+  const blob = await res.blob();
+  const url  = URL.createObjectURL(blob);
+  const audio = new Audio(url);
+  ttsAudioEl  = audio;
+
+  audio.onended = () => {
+    URL.revokeObjectURL(url);
+    ttsAudioEl = null;
+    if (btnEl) {
+      btnEl.textContent = '▶ escuchar';
+      btnEl.classList.remove('playing');
+    }
+    if (ttsCurrentBtn === btnEl) ttsCurrentBtn = null;
+  };
+  audio.onerror = audio.onended;
+  audio.play().catch(() => {});
+  return true;
+}
+
+function speakWithWebSpeech(text, btnEl) {
   if (!window.speechSynthesis) return;
-  stopAll();
+  const lang   = TTS_LANG_MAP[userProfile?.language || 'es'] || 'es-ES';
+  const chunks = splitForSpeech(text);
+  let   index  = 0;
 
-  const lang     = TTS_LANG_MAP[userProfile?.language || 'es'] || 'es-ES';
-  const chunks   = splitForSpeech(text);
-  let   index    = 0;
-  ttsCurrentBtn  = btnEl;
-  btnEl.textContent = '⏸ pausar';
-  btnEl.classList.add('playing');
-
-  // Fix bug Chrome: speechSynthesis se pausa sola pasados ~15s
   ttsKeepAlive = setInterval(() => {
     if (!window.speechSynthesis.speaking) { clearInterval(ttsKeepAlive); return; }
     window.speechSynthesis.pause();
     window.speechSynthesis.resume();
   }, 12000);
 
+  function pickVoice(langCode) {
+    const voices = window.speechSynthesis.getVoices();
+    if (!voices.length) return null;
+    const lang2 = langCode.slice(0, 2).toLowerCase();
+    const ll    = langCode.toLowerCase();
+    function score(v) {
+      const n = v.name.toLowerCase(), l = v.lang.toLowerCase();
+      let s = 0;
+      if (l === ll) s += 30; else if (l.startsWith(lang2)) s += 10; else s -= 500;
+      if (n.includes('natural') || n.includes('neural')) s += 200;
+      if (n.includes('online'))   s += 100;
+      if (!v.localService)        s +=  50;
+      if (n.includes('espeak') || n.includes('mbrola')) s -= 300;
+      return s;
+    }
+    return voices.filter(v => v.lang.toLowerCase().startsWith(lang2))
+                 .sort((a, b) => score(b) - score(a))[0] || null;
+  }
+
   function next() {
     if (index >= chunks.length) {
       clearInterval(ttsKeepAlive);
-      btnEl.textContent = '▶ escuchar';
-      btnEl.classList.remove('playing');
+      if (btnEl) { btnEl.textContent = '▶ escuchar'; btnEl.classList.remove('playing'); }
       if (ttsCurrentBtn === btnEl) ttsCurrentBtn = null;
       return;
     }
-    const utt   = new SpeechSynthesisUtterance(chunks[index]);
-    utt.lang    = lang;
-    utt.rate    = 0.88;   // más pausado = más natural
-    utt.pitch   = 0.95;   // tono ligeramente más grave, menos robótico
-    utt.volume  = 1.0;
-    const voice = pickVoice(lang);
-    if (voice) utt.voice = voice;
-    utt.onend   = () => { index++; next(); };
-    utt.onerror = () => { index++; next(); };
+    const utt  = new SpeechSynthesisUtterance(chunks[index]);
+    utt.lang   = lang; utt.rate = 0.88; utt.pitch = 0.95; utt.volume = 1.0;
+    const v    = pickVoice(lang);
+    if (v) utt.voice = v;
+    utt.onend  = () => { index++; next(); };
+    utt.onerror= () => { index++; next(); };
     window.speechSynthesis.speak(utt);
   }
 
-  // Las voces pueden no estar listas aún en el primer uso
   if (window.speechSynthesis.getVoices().length) {
     next();
   } else {
@@ -705,28 +731,45 @@ function speakText(text, btnEl) {
   }
 }
 
-function addPlayButton(bubble, text) {
-  if (!window.speechSynthesis) return; // navegador sin soporte
+async function speakText(text, btnEl) {
+  stopAll();
+  ttsCurrentBtn = btnEl;
+  if (btnEl) { btnEl.textContent = '⏸ pausar'; btnEl.classList.add('playing'); }
 
+  // Intentar Azure Neural primero; si falla usar Web Speech API como respaldo
+  if (ttsAzureWorks !== false) {
+    const ok = await speakWithAzure(text, btnEl);
+    if (ok) { ttsAzureWorks = true; return; }
+    ttsAzureWorks = false;
+  }
+  speakWithWebSpeech(text, btnEl);
+}
+
+function addPlayButton(bubble, text) {
   const btn = document.createElement('button');
   btn.className   = 'msg-play-btn';
   btn.textContent = '▶ escuchar';
 
-  // Auto-reproducir si TTS automático está activo (requiere interacción previa del usuario)
   if (loadTtsAuto()) {
-    // Pequeño delay para que el navegador permita autoplay tras la interacción del chat
     setTimeout(() => speakText(text, btn), 300);
   }
 
   btn.addEventListener('click', () => {
-    // Si este botón ya está reproduciendo → pausar/reanudar
     if (ttsCurrentBtn === btn) {
-      if (window.speechSynthesis.paused) {
-        window.speechSynthesis.resume();
-        btn.textContent = '⏸ pausar';
-      } else if (window.speechSynthesis.speaking) {
-        window.speechSynthesis.pause();
-        btn.textContent = '▶ escuchar';
+      // Toggle pausa para Azure Audio
+      if (ttsAudioEl) {
+        if (ttsAudioEl.paused) {
+          ttsAudioEl.play(); btn.textContent = '⏸ pausar';
+        } else {
+          ttsAudioEl.pause(); btn.textContent = '▶ escuchar';
+        }
+        return;
+      }
+      // Toggle pausa para Web Speech
+      if (window.speechSynthesis?.paused) {
+        window.speechSynthesis.resume(); btn.textContent = '⏸ pausar';
+      } else if (window.speechSynthesis?.speaking) {
+        window.speechSynthesis.pause(); btn.textContent = '▶ escuchar';
       } else {
         speakText(text, btn);
       }
