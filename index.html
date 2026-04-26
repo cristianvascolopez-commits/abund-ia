@@ -6,7 +6,12 @@
   <title>ABUND-IA — Oráculo de la Abundancia</title>
   <meta name="description" content="ABUND-IA. Oráculo esotérico con inteligencia artificial: tarot egipcio, herbolaria, magia y astrología.">
   <link rel="icon" type="image/svg+xml" href="favicon.svg">
-  <link rel="stylesheet" href="styles.css?v=19">
+  <!-- Preconectar a Google Fonts para reducir latencia -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <!-- Precargar imagen hero (visible inmediatamente) -->
+  <link rel="preload" as="image" href="images/abundia.webp">
+  <link rel="stylesheet" href="styles.css?v=20">
 </head>
 <body class="oracle-only">
 
@@ -18,7 +23,7 @@
       <!-- ── HERO ──────────────────────────── -->
       <div class="abundia-hero">
         <div class="hero-angel-wrap">
-          <img src="images/abundia.jpeg" alt="Diosa de la Abundancia" class="hero-angel-img">
+          <img src="images/abundia.webp" alt="Diosa de la Abundancia" class="hero-angel-img" fetchpriority="high">
           <div class="hero-angel-glow"></div>
         </div>
         <div class="hero-brand">
@@ -194,17 +199,17 @@
 
   <!-- ── DUENDES — fuera del oracle, ambientando la página ── -->
   <div class="gnomes-ambient">
-    <img src="images/gnome1.jpg" alt="Duende" style="animation-delay:0s">
-    <img src="images/gnome2.jpg" alt="Duende" style="animation-delay:2s">
-    <img src="images/gnome3.jpg" alt="Duende" style="animation-delay:4s">
+    <img src="images/gnome1.webp" alt="Duende" loading="lazy" style="animation-delay:0s">
+    <img src="images/gnome2.webp" alt="Duende" loading="lazy" style="animation-delay:2s">
+    <img src="images/gnome3.webp" alt="Duende" loading="lazy" style="animation-delay:4s">
   </div>
 
   <!-- ── HERBARIO — decoración lateral ── -->
   <div class="neon-plant neon-plant-left">
-    <img src="images/herbarium.png" loading="lazy" alt="">
+    <img src="images/herbarium.webp" loading="lazy" alt="">
   </div>
   <div class="neon-plant neon-plant-right">
-    <img src="images/herbarium.png" loading="lazy" alt="">
+    <img src="images/herbarium.webp" loading="lazy" alt="">
   </div>
 
   <!-- ── MODAL BIENVENIDA ─────────────────────── -->

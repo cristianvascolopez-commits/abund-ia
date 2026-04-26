@@ -9,6 +9,43 @@ RewriteRule ^api/oracle/?$   api-php/oracle.php   [L,QSA]
 RewriteRule ^api/tts/?$      api-php/tts.php      [L,QSA]
 RewriteRule ^api/comments/?$ api-php/comments.php [L,QSA]
 RewriteRule ^api/memory/?$     api-php/memory.php     [L,QSA]
-RewriteRule ^api/tts-azure/?$  api-php/tts-azure.php  [L,QSA]
+RewriteRule ^api/tts-azure/?$    api-php/tts-azure.php    [L,QSA]
+RewriteRule ^api/tts-voice/?$    api-php/tts-voicerss.php [L,QSA]
 
 Options -Indexes
+
+# ── Compresión Gzip ──────────────────────────
+<IfModule mod_deflate.c>
+  AddOutputFilterByType DEFLATE text/html text/css text/javascript application/javascript application/json image/svg+xml
+</IfModule>
+
+# ── Caché del navegador ──────────────────────
+<IfModule mod_expires.c>
+  ExpiresActive On
+  ExpiresByType text/html                  "access plus 1 hour"
+  ExpiresByType text/css                   "access plus 1 month"
+  ExpiresByType application/javascript     "access plus 1 month"
+  ExpiresByType image/webp                 "access plus 6 months"
+  ExpiresByType image/jpeg                 "access plus 6 months"
+  ExpiresByType image/png                  "access plus 6 months"
+  ExpiresByType image/svg+xml              "access plus 6 months"
+  ExpiresByType image/x-icon               "access plus 1 year"
+</IfModule>
+
+# ── Cabeceras de caché ───────────────────────
+<IfModule mod_headers.c>
+  <FilesMatch "\.(css|js)$">
+    Header set Cache-Control "public, max-age=2592000"
+  </FilesMatch>
+  <FilesMatch "\.(webp|jpg|jpeg|png|svg|ico)$">
+    Header set Cache-Control "public, max-age=15552000"
+  </FilesMatch>
+</IfModule>
+
+# ── WebP automático si el navegador lo soporta ──
+<IfModule mod_rewrite.c>
+  RewriteCond %{HTTP_ACCEPT} image/webp
+  RewriteCond %{REQUEST_FILENAME} \.(jpe?g|png)$
+  RewriteCond %{REQUEST_FILENAME}\.webp -f
+  RewriteRule ^ %{REQUEST_URI}.webp [T=image/webp,L]
+</IfModule>
